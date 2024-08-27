@@ -1,0 +1,1 @@
+{"batch": 2974, "memory_allocated": 938283520, "memory_reserved": 9447669760, "max_memory_allocated": 8392429568, "max_memory_reserved": 9447669760, "final_loss": 0.85899817943573, "CE_loss": 0.8565800786018372, "Final_norm": 24180944.0, "_timestamp": 1724290044.103619, "_runtime": 3610.611571073532, "_step": 3, "epoch": 2, "_wandb": {"runtime": 3693}}

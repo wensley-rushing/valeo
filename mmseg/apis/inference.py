@@ -90,8 +90,32 @@ def init_model(config: Union[str, Path, Config],
             }
     model.cfg = config  # save the config in the model for convenience
     model.to(device)
-    model.eval()
+    #model.eval()
     return model
+
+def inference_model_1(model: BaseSegmentor,
+                    img: ImageType) -> Union[SegDataSample, SampleList]:
+    """Inference image(s) with the segmentor.
+
+    Args:
+        model (nn.Module): The loaded segmentor.
+        imgs (str/ndarray or list[str/ndarray]): Either image files or loaded
+            images.
+
+    Returns:
+        :obj:`SegDataSample` or list[:obj:`SegDataSample`]:
+        If imgs is a list or tuple, the same length list type results
+        will be returned, otherwise return the segmentation results directly.
+    """
+    # prepare data
+    #data, is_batch = _preprare_data(img, model)
+
+    # forward the model
+    #with torch.no_grad():
+    results = model.forward(img)
+
+    return results #if is_batch else results[0]
+
 
 
 def inference_model(model: BaseSegmentor,
