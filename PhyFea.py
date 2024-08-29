@@ -23,10 +23,11 @@ import os
 from typing import Callable, Dict, List, Tuple, Union
 from torch import nn, optim, utils
 import torch.nn.functional as F
-from itertools import permutations
+from itertools import combinations
 
 s1 = torch.cuda.Stream('cuda:1')
 s2 = torch.cuda.Stream('cuda:2')
+s3 = torch.cuda.Stream('cuda:3')
 
 def _get_relu(name: str) -> nn.Sequential:
     container = nn.Sequential()
@@ -65,7 +66,7 @@ class PhysicsFormer(nn.Module):
     self.avgpool_1 = _avg_pool2D("avgpool_1")
     self.pad_1 = nn.ConstantPad2d(1,1)
     self.pad_0  = nn.ConstantPad2d(1,0)
-    self.T=512
+    self.T=8
 
   def opening(self, x):
 
@@ -123,22 +124,28 @@ class PhysicsFormer(nn.Module):
       
       upscaled_softmax = logits_upscaled.softmax(dim=1)
       tensor_list = []
-      perm = permutations(range(self.num_classes), 2)
+      perm = combinations(range(self.num_classes), 2)
+      
       for i in perm:
           concatenated_tensor = torch.cat(
                 (upscaled_softmax[:, i[0]:i[0] + 1, ::], upscaled_softmax[:, i[1]:i[1] + 1, ::]), dim=1)
           logits_mean = torch.mean(concatenated_tensor, dim=1, keepdim=True)
-          logits_sub = torch.sub(concatenated_tensor, logits_mean, alpha=1)
+          logits_sub = torch.sub(concatenated_tensor, logits_mean, alpha=1)       
           concat_relu = self.relu(logits_sub)
           tensor_list.append(concat_relu)
+          
 
       final_concatenated = torch.cat(tensor_list, dim=1)
-
+      split_tensor = torch.split(final_concatenated,[171,171],dim=1)
      
 
       with torch.cuda.stream(s1):
 
-          norm_opened = self.final_operation(final_concatenated)
+          norm_opened_1 = self.final_operation(split_tensor[0])
+
+      with torch.cuda.stream(s3):
+
+          norm_opened_2 = self.final_operation(split_tensor[1].to('cuda:3'))
  
       with torch.cuda.stream(s2):
 
@@ -146,6 +153,6 @@ class PhysicsFormer(nn.Module):
       
       torch.cuda.synchronize('cuda:1')
       torch.cuda.synchronize('cuda:2')
-      final_norm = torch.abs(norm_opened - norm_dilated.to('cuda:1'))
-
+      torch.cuda.synchronize('cuda:3')
+      final_norm = torch.abs((norm_opened_1+ norm_opened_2.to('cuda:1')) - norm_dilated.to('cuda:1'))
       return final_norm

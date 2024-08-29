@@ -162,72 +162,58 @@ def train(model,phyfea,train_loader,optimizer,criterion) :
 
     eps = 1e-10
     L1_values = 0
-    #log_values = []
-    #iou_list = []
+    
     # IMPORTANT: from now on, since we will introduce batch norm, we have to tell PyTorch if we are training or evaluating our model
     model.train()
-    #scales = [0.5,2.0]
-    resized_images = []
+    phyfea.train()
+    
     for idx_batch, (image, labels) in tqdm(enumerate(train_loader), total=len(train_loader), desc='Sample'): #595
 
-      #print(f'label shape-->{labels.shape}')
-      #labels = F.interpolate(labels.unsqueeze(1), size=(64,64), mode='billinear', align_corners=False)
-      #labels = labels.squeeze(1)
-      # for scale in scales:
-      #image = nn.functional.interpolate(image, scale_factor=scales[1], mode='bilinear', align_corners=True)
+      
+      
       labels =  labels.to('cuda:0')
 
       optimizer.zero_grad()
       final_loss = 0
-      #for images in resized_images:
+      
 
       scores = inference_model_1(model, image.to('cuda:0'))
       final_norm = phyfea(scores.to('cuda:1'))
       scores = nn.functional.interpolate(scores, size=(labels.shape[1], labels.shape[2]), mode='bilinear', align_corners=False)
       ce_loss = criterion(scores, labels) #.unsqueeze(dim=0))
-
-      final_loss += (ce_loss + eps*final_norm.to('cuda:0'))
-
+      final_norm = final_norm.to('cuda:0')
+      final_loss += (ce_loss + eps*final_norm)
       loss_train += final_loss.item()*len(image)
       train_ce_loss += ce_loss.item()*len(image)
       L1_values += final_norm.item()*len(image)
       samples_train += len(image)
-      #L1_values.append(final_norm.item())
-      #log_values.append(logging)
-      #iou = metric(pred, label)
-      #iou_list.append(iou.reshape(1))
+      
 
       final_loss.backward()
       optimizer.step()
-      # if final_loss>=1:
-      #   eps = 1e-16
+      
 
-      #correct += iou_stats(scores, labels)
-      # torch.cuda.empty_cache()
-      # gc.collect()
+      
 
 
 
     loss_train /= samples_train
     train_ce_loss /= samples_train
     L1_values /= samples_train
-    #meaniou = torch.mean(iou_list)
-    #accuracy = 100. * correct / samples_train
+    
     print(f'loss--->{loss_train}')
     print(f'ce_loss-->{train_ce_loss}')
     print(f'final_norm-->{L1_values}')
-    #print(f'loggers-->{logging}')
-    #print(f'IOU mean--->{meaniou}')
-    #print(f'accuracy--->{accuracy}')
+    
     wandb.log({
             'batch': idx_batch,
             'memory_allocated': torch.cuda.memory_allocated(),
             'memory_reserved': torch.cuda.memory_reserved(),
             'max_memory_allocated': torch.cuda.max_memory_allocated(),
             'max_memory_reserved': torch.cuda.max_memory_reserved(),
-            'final_loss': final_loss.item(),
-            'CE_loss' : ce_loss.item(),
-            'Final_norm' : final_norm.item()
+            'final_loss': loss_train,
+            'CE_loss' : train_ce_loss,
+            'Final_norm' : L1_values
         })
     torch.cuda.empty_cache()
     gc.collect()
@@ -267,9 +253,7 @@ def training_loop(num_epochs: int,
     #train_acc_values = []
     l1_values = []
     train_ce = []
-    #logers = []
-    #ious = []
-    #val_acc_values = []
+    
     for epoch in range(1, num_epochs+1):
         print(f'Epoch----{epoch}/{num_epochs}')
         loss_train, L1_values, train_ce_loss = train(model,phyfea, loader_train,optimizer,criterion)   #accuracy_train
@@ -281,14 +265,12 @@ def training_loop(num_epochs: int,
         losses_values.append(loss_train)
         l1_values.append(L1_values)
         train_ce.append(train_ce_loss)
-        #logers.append(logging)
-        #ious.append(iou_mean)
-        #train_acc_values.append(accuracy)
-        #val_acc_values.append(accuracy_val)
+       
         scheduler.step()
-        #lr =  optimizer.param_groups[0]['lr']
-        wandb.log({'epoch': epoch})
-        torch.save(phyfea.state_dict(), f'/cluster/work/cvl/shbasu/phyfeaSegformer/data/physicsFormer_segformer_cityscape_{epoch}.pth')
+       
+        torch.save(model.state_dict(), f'/cluster/work/cvl/shbasu/phyfeaSegformer/data/physicsFormer_segformer_cityscape_{epoch}.pth')
+        #wandb.log({'epoch': epoch})
+        
                   
 
   
@@ -296,10 +278,7 @@ def training_loop(num_epochs: int,
     return {'loss_values': losses_values,
             'L1_values': l1_values,
             'train_ce_loss': train_ce}
-            #'mean_max_values': logers}
-            #'meanIOU' : ious}
-            #'train_acc_values': train_acc_values}
-            #'val_acc_values': val_acc_values}
+            
 
 
 
@@ -313,7 +292,7 @@ def main():
 
     weight_decay=0.01
     momentum = 0.9
-    num_epochs = 100
+    num_epochs = 5
     num_classes = 19
 
     config_file = '/cluster/work/cvl/shbasu/phyfeaSegformer/data/segformer_mit-b3_8xb1-160k_cityscapes-1024x1024.py'  #/content/mmsegmentation/ocrnet_hr18_4xb2-40k_cityscapes-512x1024.py'
@@ -323,11 +302,11 @@ def main():
 
 
 
-    #result = inference_model(model, img)
+    
     physicsFormer = PhysicsFormer(num_classes).to('cuda:1')
 
-    if os.path.exists('/content/data/physicsFormer_OCR_cityscape.pth'):
-        physicsFormer.load_state_dict(torch.load('/content/data/physicsFormer_OCR_cityscape.pth'))
+    if os.path.exists('/cluster/work/cvl/shbasu/phyfeaSegformer/data/physicsFormer_segformer_cityscape_5.pth'):
+        model.load_state_dict(torch.load('/cluster/work/cvl/shbasu/phyfeaSegformer/data/physicsFormer_segformer_cityscape_5.pth'))
         print(f'******model_loaded***********')
 
 
@@ -346,10 +325,10 @@ def main():
 
 
     print(f'loss value: {loss_value}')
-    #print(f'accuracy values: {acc_value}')
+    
     print(f'L1 loss values: {L1_values}')
     print(f'Cross_entropy loss values: {train_ce_loss}')
-    #print(f'mean max values : {mean_max_values}')
+    
     
 
 
